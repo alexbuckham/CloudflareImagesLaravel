@@ -3,43 +3,59 @@
 namespace AlexBuckham\CloudflareImagesLaravel;
 
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\GuzzleException;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Str;
 
 class CloudflareImages
 {
-
 	private ?string $account_id;
 	private ?string $token;
 	private ?string $key;
 	private ?string $delivery_url;
 
-	public function __construct($account_id = null, $token = null, $key = null, $delivery_url = null)
+	/**
+	 * CloudflareImages constructor.
+	 *
+	 * @param string|null $account_id
+	 * @param string|null $token
+	 * @param string|null $key
+	 * @param string|null $delivery_url
+	 */
+	public function __construct(?string $account_id = null, ?string $token = null, ?string $key = null, ?string $delivery_url = null)
 	{
-		$this->account_id = $account_id ?: config('cloudflare-images.account_id');
-		$this->token = $token ?: config('cloudflare-images.token');
-		$this->key = $key ?: config('cloudflare-images.key');
-		$this->delivery_url = $delivery_url ?: config('cloudflare-images.delivery_url');
+		$this->account_id = $account_id ?: $this->getConfig('cloudflare-images.account_id');
+		$this->token = $token ?: $this->getConfig('cloudflare-images.token');
+		$this->key = $key ?: $this->getConfig('cloudflare-images.key');
+		$this->delivery_url = $delivery_url ?: $this->getConfig('cloudflare-images.delivery_url');
 	}
 
 	/**
+	 * Create a new image variant.
+	 *
 	 * @param ImageVariant $variant
-	 * @return mixed
+	 * @return \stdClass
+	 * @throws GuzzleException
 	 */
-	public function createVariant(ImageVariant $variant)
+	public function createVariant(ImageVariant $variant): \stdClass
 	{
+		$variant->validate();
+
 		return $this->makeCall('POST', 'images/v1/variants', [
 			'json' => [
-				'id'                     => $variant->id,
-				'options'                => $variant->getOptions(),
+				'id' => $variant->id,
+				'options' => $variant->getOptions(),
 				'neverRequireSignedURLs' => $variant->alwaysPublic,
 			],
 		]);
 	}
 
 	/**
+	 * Generate a direct upload URL.
+	 *
 	 * @param bool $private
 	 * @return \stdClass
-	 * @throws \GuzzleHttp\Exception\GuzzleException
+	 * @throws GuzzleException
 	 */
 	public function generateUploadUrl(bool $private = false): \stdClass
 	{
@@ -52,29 +68,23 @@ class CloudflareImages
 
 	/**
 	 * @param string $uuid
-	 * @param string $variant
-	 * @param \DateTime|null $expires_at
+	 * @param \DateTime $expires_at
 	 * @return string
 	 * @throws \Exception
 	 */
-	public function getSignedUrl(string $uuid, string $variant, \DateTime $expires_at = null): string
+	public function getSignedUrl(string $uuid, \DateTime $expires_at): string
 	{
 		if (!$this->key) {
 			throw new \Exception('A key must be provided in the constructor.');
 		}
 
-		if (!in_array($variant, array_keys(config('cloudflare-images.variants')))) {
-			throw new \Exception('Variant not found.');
-		}
+		$expiry = $expires_at->getTimestamp();
+		$url = $this->delivery_url . "/${uuid}?exp=$expiry";
 
-		$expiry = $expires_at ? $expires_at->getTimestamp() : now()->addDay()->timestamp;
-		$to_sign = '/' . config('cloudflare-images.account_hash') . "/{$uuid}/{$variant}?exp=$expiry";
-
+		$to_sign = Str::replace(['https://imagedelivery.net', 'http://imagedelivery.net'], '', $url);
 		$signature = hash_hmac('sha256', $to_sign, $this->key);
 
-		$base_url = config('cloudflare-images.custom_domain') ? config('cloudflare-images.custom_domain') . '/cdn-cgi/imagedelivery' : 'imagedelivery.net';
-
-		return 'https://' . $base_url . $to_sign . "&sig=$signature";
+		return $url . "&sig=$signature";
 	}
 
 	/**
@@ -126,26 +136,56 @@ class CloudflareImages
 	}
 
 	/**
+	 * Make an API call to Cloudflare.
+	 *
 	 * @param string $method
 	 * @param string $url
 	 * @param array $data
-	 * @return mixed
-	 * @throws \GuzzleHttp\Exception\GuzzleException
+	 * @return \stdClass
+	 * @throws GuzzleException
+	 * @throws \Exception
 	 */
-	private function makeCall(string $method, string $url, $data = [])
+	private function makeCall(string $method, string $url, array $data = []): \stdClass
 	{
+		if (!$this->account_id || !$this->token) {
+			throw new \Exception('Account ID and token are required for API calls.');
+		}
+
 		$guzzle = new Client([
 			'headers' => [
 				'Authorization' => 'Bearer ' . $this->token,
-				'Content-Type'  => 'application/json',
+				'Content-Type' => 'application/json',
 			],
+			'timeout' => $this->getConfig('cloudflare-images.http_options.timeout', 30),
+			'connect_timeout' => $this->getConfig('cloudflare-images.http_options.connect_timeout', 10),
 		]);
 
-		$url = sprintf('https://api.cloudflare.com/client/v4/accounts/%s/%s', $this->account_id, $url);
+		$full_url = sprintf('https://api.cloudflare.com/client/v4/accounts/%s/%s', $this->account_id, $url);
 
-		$response = $guzzle->request($method, $url, $data);
+		$response = $guzzle->request($method, $full_url, $data);
+		$body = json_decode($response->getBody()->getContents());
 
-		return json_decode($response->getBody()->getContents())->result;
+		if (!$body->success) {
+			throw new \Exception('API call failed: ' . ($body->errors[0]->message ?? 'Unknown error'));
+		}
+
+		return $body->result;
+	}
+
+	/**
+	 * Get configuration value with fallback for non-Laravel context.
+	 *
+	 * @param string $key
+	 * @param mixed $default
+	 * @return mixed
+	 */
+	private function getConfig(string $key, $default = null)
+	{
+		if (function_exists('config')) {
+			return config($key, $default);
+		}
+
+		return $default;
 	}
 
 }

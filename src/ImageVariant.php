@@ -4,21 +4,46 @@ namespace AlexBuckham\CloudflareImagesLaravel;
 
 class ImageVariant
 {
+	public string $id;
+	public bool $alwaysPublic = false;
+	public ?int $width = null;
+	public ?int $height = null;
+	public ?int $blur = null;
+	public ?string $metaData = null;
+	public ?string $fit = null;
 
-	public string  $id;
-	public bool    $alwaysPublic = false;
-	public ?int    $width        = null;
-	public ?int    $height       = null;
-	public ?int    $blur         = null;
-	public ?string $metaData     = null;
-	public ?string $fit          = null;
+	/**
+	 * Valid metadata options
+	 */
+	public const METADATA_KEEP = 'keep';
+	public const METADATA_COPYRIGHT = 'copyright';
+	public const METADATA_NONE = 'none';
 
-	public function __construct($id)
+	/**
+	 * Valid fit options
+	 */
+	public const FIT_SCALE_DOWN = 'scale-down';
+	public const FIT_CONTAIN = 'contain';
+	public const FIT_COVER = 'cover';
+	public const FIT_CROP = 'crop';
+	public const FIT_PAD = 'pad';
+
+	/**
+	 * ImageVariant constructor.
+	 *
+	 * @param string $id
+	 */
+	public function __construct(string $id)
 	{
 		$this->id = $id;
 	}
 
-	public function validate()
+	/**
+	 * Validate the variant configuration.
+	 *
+	 * @throws \Exception
+	 */
+	public function validate(): void
 	{
 		if (is_null($this->width)) {
 			throw new \Exception('Width is required');
@@ -29,31 +54,43 @@ class ImageVariant
 		}
 
 		if (is_null($this->metaData)) {
-			throw new \Exception('Meta is required');
+			throw new \Exception('Metadata is required');
 		}
 
-		if (!in_array($this->metaData, ['keep', 'copyright', 'none'])) {
-			throw new \Exception('Meta value must be one of keep, copyright, none');
+		$validMetadata = [self::METADATA_KEEP, self::METADATA_COPYRIGHT, self::METADATA_NONE];
+		if (!in_array($this->metaData, $validMetadata)) {
+			throw new \Exception('Metadata value must be one of: ' . implode(', ', $validMetadata));
 		}
 
 		if (is_null($this->fit)) {
-			throw new \Exception('Meta is required');
+			throw new \Exception('Fit is required');
 		}
 
-		if (!in_array($this->fit, ['scale-down', 'contain', 'cover', 'crop', 'pad'])) {
-			throw new \Exception('Fit value must be one of scale-down, contain, cover, crop, pad');
+		$validFit = [self::FIT_SCALE_DOWN, self::FIT_CONTAIN, self::FIT_COVER, self::FIT_CROP, self::FIT_PAD];
+		if (!in_array($this->fit, $validFit)) {
+			throw new \Exception('Fit value must be one of: ' . implode(', ', $validFit));
 		}
 	}
 
-	public function getOptions()
+	/**
+	 * Get the variant options for API submission.
+	 *
+	 * @return array
+	 */
+	public function getOptions(): array
 	{
-		return [
-			'width'    => $this->width,
-			'height'   => $this->height,
+		$options = [
+			'width' => $this->width,
+			'height' => $this->height,
 			'metadata' => $this->metaData,
-			'fit'      => $this->fit,
-			'blur'     => $this->blur,
+			'fit' => $this->fit,
 		];
+
+		if ($this->blur !== null) {
+			$options['blur'] = $this->blur;
+		}
+
+		return $options;
 	}
 
 	/**
@@ -105,7 +142,7 @@ class ImageVariant
 	 */
 	public function blur(?int $blur): ImageVariant
 	{
-		if ($blur < 0 || $blur > 100) {
+		if ($blur !== null && ($blur < 0 || $blur > 100)) {
 			throw new \Exception('Blur must be between 0 and 100');
 		}
 
@@ -136,4 +173,41 @@ class ImageVariant
 		return $this;
 	}
 
+	/**
+	 * Create a variant from configuration array.
+	 *
+	 * @param string $id
+	 * @param array $config
+	 * @return static
+	 */
+	public static function fromConfig(string $id, array $config): self
+	{
+		$variant = new self($id);
+
+		if (isset($config['width'])) {
+			$variant->width($config['width']);
+		}
+
+		if (isset($config['height'])) {
+			$variant->height($config['height']);
+		}
+
+		if (isset($config['fit'])) {
+			$variant->fit($config['fit']);
+		}
+
+		if (isset($config['metadata'])) {
+			$variant->metaData($config['metadata']);
+		}
+
+		if (isset($config['blur'])) {
+			$variant->blur($config['blur']);
+		}
+
+		if (isset($config['always_public'])) {
+			$variant->alwaysPublic($config['always_public']);
+		}
+
+		return $variant;
+	}
 }

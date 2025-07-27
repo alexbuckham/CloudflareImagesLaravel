@@ -1,42 +1,62 @@
 {
-    "name": "alexbuckham/cloudflare-images-laravel",
-    "description": "Provides access to the Cloudflare Images service for Laravel.",
-    "keywords": [
-      "alexbuckha",
-      "cloudflare",
-      "images",
-      "php",
-      "laravel"
-    ],
-    "authors": [
-        {
-            "name": "Alex Buckham",
-            "email": "alexbuckham@me.com"
-        }
-    ],
-    "minimum-stability": "dev",
-    "license": "MIT",
-    "require": {
-        "php": "^8.2",
-        "guzzlehttp/guzzle": "^7.0"
-    },
-    "require-dev": {
-        "orchestra/testbench": "^6.0",
-        "phpunit/phpunit": "^9.3"
-    },
-    "autoload": {
-        "psr-4": {
-            "AlexBuckham\\CloudflareImagesLaravel\\": "src/"
-        }
-    },
-    "config": {
-        "sort-packages": true
-    },
-    "extra": {
-        "laravel": {
-            "providers": [
-                "AlexBuckham\\CloudflareImagesLaravel\\CloudflareImagesProvider"
-            ]
-        }
+  "name": "alexbuckham/cloudflare-images-laravel",
+  "description": "Provides access to the Cloudflare Images service for Laravel.",
+  "keywords": [
+    "alexbuckham",
+    "cloudflare",
+    "images",
+    "php",
+    "laravel"
+  ],
+  "authors": [
+    {
+      "name": "Alex Buckham",
+      "email": "alexbuckham@me.com"
     }
+  ],
+  "minimum-stability": "stable",
+  "prefer-stable": true,
+  "license": "MIT",
+  "require": {
+    "php": "^8.1",
+    "guzzlehttp/guzzle": "^7.0",
+    "illuminate/contracts": "^10.0|^11.0|^12.0",
+    "illuminate/support": "^10.0|^11.0|^12.0"
+  },
+  "require-dev": {
+    "orchestra/testbench": "^8.0|^9.0|^10.0",
+    "phpunit/phpunit": "^10.0|^11.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "AlexBuckham\\CloudflareImagesLaravel\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "AlexBuckham\\CloudflareImagesLaravel\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit",
+    "test-coverage": "phpunit --coverage-html coverage",
+    "format": "vendor/bin/pint",
+    "analyse": "vendor/bin/phpstan analyse"
+  },
+  "config": {
+    "sort-packages": true,
+    "allow-plugins": {
+      "pestphp/pest-plugin": true
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "AlexBuckham\\CloudflareImagesLaravel\\CloudflareImagesProvider"
+      ],
+      "aliases": {
+        "CloudflareImages": "AlexBuckham\\CloudflareImagesLaravel\\Facades\\CloudflareImagesFacade"
+      }
+    }
+  }
 }
