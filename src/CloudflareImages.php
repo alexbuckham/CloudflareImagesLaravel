@@ -5,7 +5,6 @@ namespace AlexBuckham\CloudflareImagesLaravel;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Str;
 
 class CloudflareImages
 {
@@ -68,23 +67,32 @@ class CloudflareImages
 
 	/**
 	 * @param string $uuid
-	 * @param \DateTime $expires_at
+	 * @param string $variant
+	 * @param \DateTime|null $expires_at
 	 * @return string
 	 * @throws \Exception
 	 */
-	public function getSignedUrl(string $uuid, \DateTime $expires_at): string
+	public function getSignedUrl(string $uuid, string $variant, ?\DateTime $expires_at = null): string
 	{
 		if (!$this->key) {
 			throw new \Exception('A key must be provided in the constructor.');
 		}
 
-		$expiry = $expires_at->getTimestamp();
-		$url = $this->delivery_url . "/${uuid}?exp=$expiry";
+		$variants = $this->getConfig('cloudflare-images.variants', []);
+		if (!in_array($variant, array_keys($variants))) {
+			throw new \Exception('Variant not found.');
+		}
 
-		$to_sign = Str::replace(['https://imagedelivery.net', 'http://imagedelivery.net'], '', $url);
+		$expiry = $expires_at ? $expires_at->getTimestamp() : now()->addDay()->timestamp;
+		$account_hash = $this->getConfig('cloudflare-images.account_hash');
+		$to_sign = "/{$account_hash}/{$uuid}/{$variant}?exp=$expiry";
+
 		$signature = hash_hmac('sha256', $to_sign, $this->key);
 
-		return $url . "&sig=$signature";
+		$custom_domain = $this->getConfig('cloudflare-images.custom_domain');
+		$base_url = $custom_domain ? $custom_domain . '/cdn-cgi/imagedelivery' : 'imagedelivery.net';
+
+		return 'https://' . $base_url . $to_sign . "&sig=$signature";
 	}
 
 	/**
